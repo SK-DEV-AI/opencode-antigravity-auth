@@ -188,11 +188,18 @@ export function resolveModelWithTier(requestedModel: string): ResolvedModel {
   const resolvedModel = MODEL_FALLBACKS[actualModel] || actualModel;
   const isThinking = isThinkingCapableModel(resolvedModel);
 
+  // Check if this is a Gemini 3 model (works for both aliased and skipAlias paths)
+  const isEffectiveGemini3 = resolvedModel.toLowerCase().includes("gemini-3");
+  const isFlash = resolvedModel.toLowerCase().includes("flash");
+
   if (!tier) {
-    if (resolvedModel === "gemini-3-flash" && !skipAlias) {
+    // Gemini 3 models without explicit tier get a default thinkingLevel
+    if (isEffectiveGemini3) {
+      // Flash defaults to "minimal", Pro defaults to "medium" (matches OpenAI's default reasoningEffort)
+      const defaultLevel = isFlash ? "minimal" : "medium";
       return {
         actualModel: resolvedModel,
-        thinkingLevel: "minimal",
+        thinkingLevel: defaultLevel,
         isThinkingModel: true,
         quotaPreference,
         explicitQuota,
@@ -201,20 +208,11 @@ export function resolveModelWithTier(requestedModel: string): ResolvedModel {
     return { actualModel: resolvedModel, isThinkingModel: isThinking, quotaPreference, explicitQuota };
   }
 
-  if (resolvedModel.includes("gemini-3") && !skipAlias) {
+  // Gemini 3 models with tier always get thinkingLevel set
+  if (isEffectiveGemini3) {
     return {
       actualModel: resolvedModel,
       thinkingLevel: tier,
-      tier,
-      isThinkingModel: true,
-      quotaPreference,
-      explicitQuota,
-    };
-  }
-
-  if (skipAlias) {
-    return {
-      actualModel: resolvedModel,
       tier,
       isThinkingModel: true,
       quotaPreference,
