@@ -1226,8 +1226,8 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
 
 
-                // Handle 429 rate limit with improved logic
-                if (response.status === 429) {
+                // Handle 429 rate limit (or Service Overloaded) with improved logic
+                if (response.status === 429 || response.status === 503 || response.status === 529 || response.status === 500) {
                   // Refund token on rate limit
                   if (tokenConsumed) {
                     getTokenTracker().refund(account.index);
@@ -1240,11 +1240,12 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   const quotaKey = headerStyleToQuotaKey(headerStyle, family);
                   const { attempt, delayMs, isDuplicate } = getRateLimitBackoff(account.index, quotaKey, serverRetryMs);
 
-                  const rateLimitReason = parseRateLimitReason(bodyInfo.reason, bodyInfo.message);
+                  // [Enhanced Parsing] Pass status to handling logic
+                  const rateLimitReason = parseRateLimitReason(bodyInfo.reason, bodyInfo.message, response.status);
+                  
+                  // Calculate potential backoffs
                   const smartBackoffMs = calculateBackoffMs(rateLimitReason, account.consecutiveFailures ?? 0, serverRetryMs);
                   const effectiveDelayMs = Math.max(delayMs, smartBackoffMs);
-                  
-                  const isCapacityExhausted = rateLimitReason === "MODEL_CAPACITY_EXHAUSTED";
 
                   pushDebug(
                     `429 idx=${account.index} email=${account.email ?? ""} family=${family} delayMs=${effectiveDelayMs} attempt=${attempt} reason=${rateLimitReason}`,
@@ -1272,34 +1273,38 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
                   getHealthTracker().recordRateLimit(account.index);
 
-                  if (isCapacityExhausted) {
-                    const capacityBackoffMs = calculateBackoffMs(rateLimitReason, account.consecutiveFailures ?? 0, serverRetryMs);
-                    accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs);
-                    
-                    const backoffFormatted = formatWaitTime(capacityBackoffMs);
-                    const failures = account.consecutiveFailures ?? 0;
-                    pushDebug(`capacity exhausted on account ${account.index}, backoff=${capacityBackoffMs}ms (failure #${failures})`);
+                  // STRATEGY 1: CAPACITY / SERVER ERROR (Transient)
+                  // Goal: Wait and Retry SAME Account. DO NOT LOCK.
+                  if (rateLimitReason === "MODEL_CAPACITY_EXHAUSTED" || rateLimitReason === "SERVER_ERROR") {
+                     // Use specific backoffs from accounts.ts constants
+                     // MODEL_CAPACITY_EXHAUSTED_BACKOFF = 15000
+                     // SERVER_ERROR_BACKOFF = 20000
+                     const waitMs = smartBackoffMs; 
+                     const waitSec = Math.round(waitMs / 1000);
+                     
+                     // Only increment for logging/toast frequency, NOT for exponential backoff state of the ACCOUNT
+                     const failures = (account.consecutiveFailures ?? 0) + 1;
+                     account.consecutiveFailures = failures;
+                     
+                     pushDebug(`Server busy (${rateLimitReason}) on account ${account.index}, soft wait ${waitMs}ms (failure #${failures})`);
 
-                    // Check if we can switch to another account (respects switch_on_first_rate_limit config)
-                    if (config.switch_on_first_rate_limit && accountCount > 1) {
-                      await showToast(`Server at capacity. Switching account in 1s...`, "warning");
-                      await sleep(FIRST_RETRY_DELAY_MS, abortSignal);
-                      shouldSwitchAccount = true;
-                      break;
-                    }
-
-                    // No other accounts available or config disabled - wait the backoff
-                    await showToast(
-                      `Server at capacity. Waiting ${backoffFormatted}... (attempt ${failures})`,
-                      "warning",
-                    );
-                    await sleep(capacityBackoffMs, abortSignal);
-                    continue;
+                     if (failures % 2 === 1) { // Show on odd attempts (1, 3, 5)
+                       await showToast(
+                         `⏳ Server busy (${response.status}). Retrying in ${waitSec}s...`,
+                         "warning",
+                       );
+                     }
+                     await sleep(waitMs, abortSignal);
+                     continue; // Retry SAME account, SAME endpoint
                   }
+                  
+                  // STRATEGY 2: RATE LIMIT EXCEEDED (RPM) / QUOTA EXHAUSTED / UNKNOWN
+                  // Goal: Lock and Rotate (Standard Logic)
                   
                   const accountLabel = account.email || `Account ${account.index + 1}`;
 
-                  if (attempt === 1) {
+                  // Progressive retry for standard 429s: 1st 429 → 1s then switch (if enabled) or retry same
+                  if (attempt === 1 && rateLimitReason !== "QUOTA_EXHAUSTED") {
                     await showToast(`Rate limited. Quick retry in 1s...`, "warning");
                     await sleep(FIRST_RETRY_DELAY_MS, abortSignal);
                     
