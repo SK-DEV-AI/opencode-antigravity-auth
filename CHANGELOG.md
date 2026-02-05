@@ -12,7 +12,7 @@
 
 - **Soft Quota Protection** - Skip accounts over 90% usage threshold to prevent Google penalties, with configurable `soft_quota_threshold_percent` and wait/retry behavior
 
-- **Gemini CLI Quota Management** - Enhanced quota display with dual quota pool support (Antigravity + Gemini CLI), tree-style view, and color-coded progress bars
+- **Gemini CLI Quota Management** - Enhanced quota display with dual quota pool support (Antigravity + Gemini CLI)
 
 - **`OPENCODE_CONFIG_DIR` Environment Variable** - Custom config location support for non-standard setups
 
@@ -22,7 +22,7 @@
 
 ### Changed
 
-- **Simplified Model Names** - Removed `antigravity-` prefix from model names (`claude-sonnet-4-5-thinking` instead of `antigravity-claude-sonnet-4-5-thinking`). Legacy names still work for backward compatibility
+- **Model Naming and Routing** - Documented antigravity-prefixed model names and automatic mapping to CLI preview names (e.g., `antigravity-gemini-3-flash` → `gemini-3-flash-preview`)
 
 - **Antigravity-First Quota Strategy** - Exhausts Antigravity quota across ALL accounts before falling back to Gemini CLI quota (previously per-account)
 
@@ -40,7 +40,6 @@
 - **#233**: Skip sandbox endpoints for Gemini CLI models (fixes 404/403 cascade)
 - **Windows Config Auto-Migration**: Automatically migrates config from `%APPDATA%\opencode\` to `~/.config/opencode/`
 - **Root Session Detection**: Reset `isChildSession` flag correctly for root sessions
-- **Quota Refresh Cleanup**: Ensure quota refresh process cleans up on missing account
 - **Stale Quota Cache**: Prevent spin loop on stale quota cache
 - **Quota Group Default**: Fix quota group selection defaulting to `gemini-pro` when model is null
 
@@ -52,7 +51,9 @@
 ### Documentation
 
 - Updated README with model configuration options and simplified setup instructions
-- Added MODEL-VARIANTS.md with Antigravity model names and configuration guidance
+- Updated MODEL-VARIANTS.md with Antigravity model names and configuration guidance
+- Updated CONFIGURATION.md to clarify `quota_fallback` behavior across accounts
+- Updated MULTI-ACCOUNT.md with dual quota pool and fallback flow details
 
 ---
 
