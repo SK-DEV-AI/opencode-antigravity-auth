@@ -1568,9 +1568,9 @@ export const createAntigravityPlugin = (providerId: string) => async (
                       "error"
                     );
                     
-                    // Disable account and save
+                    // Disable account and save immediately (force persist before error)
                     account.enabled = false;
-                    accountManager.requestSaveToDisk();
+                    await accountManager.saveToDisk();
                     
                     // Refund token if consumed (hybrid strategy)
                     if (tokenConsumed) {
