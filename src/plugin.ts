@@ -1572,11 +1572,17 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     account.enabled = false;
                     accountManager.requestSaveToDisk();
                     
+                    // Refund token if consumed (hybrid strategy)
+                    if (tokenConsumed) {
+                      getTokenTracker().refund(account.index);
+                      tokenConsumed = false;
+                    }
+
                     // Force switch to next account
                     shouldSwitchAccount = true;
                     // Reset capacity retry count as we are switching accounts
                     capacityRetryCount = 0; 
-                    continue;
+                    break;
                   }
                 }
 
