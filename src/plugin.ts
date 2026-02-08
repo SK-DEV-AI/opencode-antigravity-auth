@@ -1582,6 +1582,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     shouldSwitchAccount = true;
                     // Reset capacity retry count as we are switching accounts
                     capacityRetryCount = 0; 
+                    lastError = new Error(`Account disabled: verification required for ${email}`);
                     break;
                   }
                 }
